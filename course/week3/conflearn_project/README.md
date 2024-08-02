@@ -9,3 +9,4 @@ This project will implement confidence learning to identify elements for relabel
 # README
 MODEL W/O CONFIDENCE LEARNING  : 88.9% 
 MODEL WITH CONFIDENCE LEARNING : 92.2% 
+MODEL WITH LABEL STUDIO ANNOTATION CORRECTIONS : 92.5%
