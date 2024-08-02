@@ -19,7 +19,6 @@ from conflearn.system import ReviewDataModule, SentimentClassifierSystem
 from conflearn.utils import load_config, to_json
 from conflearn.paths import DATA_DIR, LOG_DIR, CONFIG_DIR
 
-
 class TrainIdentifyReview(FlowSpec):
   r"""A MetaFlow that trains a sentiment classifier on reviews of luxury beauty
   products using PyTorch Lightning, identifies data quality issues using CleanLab, 
@@ -161,7 +160,36 @@ class TrainIdentifyReview(FlowSpec):
       # Types:
       # --
       # probs_: np.array[float] (shape: |test set|)
-      # TODO
+      
+      # Get train and test slices
+      X_train, X_test = X[train_index], X[test_index]
+      y_train, y_test = y[train_index], y[test_index]
+      
+      # Convert to pytorch tensors
+      X_train_tensor = torch.from_numpy(X_train)
+      X_test_tensor = torch.from_numpy(X_test)
+      y_train_tensor = torch.from_numpy(y_train)
+      y_test_tensor = torch.from_numpy(y_test)
+
+      # Create our data loaders
+      train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+      test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+      # Use with DataLoader to iterate over mini-batches
+      train_dataloader = DataLoader(train_dataset, batch_size=self.config.train.optimizer.batch_size, shuffle=True)
+      test_dataloader = DataLoader(test_dataset, batch_size=self.config.train.optimizer.batch_size, shuffle=False)
+      
+      # Create the sentiment classifier system
+      system = SentimentClassifierSystem(self.config)
+
+      # Train the model
+      trainer = Trainer(max_epochs=self.config.train.optimizer.max_epochs)
+      trainer.fit(system, train_dataloader)
+
+      # Calculate probabilities
+      predictions = trainer.predict(system, dataloaders=test_dataloader)
+      probs_ = np.concatenate([pred.cpu().numpy().flatten() for pred in predictions])
+
       # ===============================================
       assert probs_ is not None, "`probs_` is not defined."
       probs[test_index] = probs_
@@ -206,7 +234,9 @@ class TrainIdentifyReview(FlowSpec):
     # Types
     # --
     # ranked_label_issues: List[int]
-    # TODO
+    
+    ranked_label_issues = find_label_issues(np.asarray(self.all_df.label), prob, return_indices_ranked_by="self_confidence")
+
     # =============================
     assert ranked_label_issues is not None, "`ranked_label_issues` not defined."
 
@@ -303,7 +333,11 @@ class TrainIdentifyReview(FlowSpec):
     # dm.train_dataset.data = training slice of self.all_df
     # dm.dev_dataset.data = dev slice of self.all_df
     # dm.test_dataset.data = test slice of self.all_df
-    # TODO
+    
+    dm.train_dataset.data = self.all_df.iloc[:train_size]
+    dm.dev_dataset.data = self.all_df.iloc[train_size:train_size+dev_size]
+    dm.test_dataset.data = self.all_df.iloc[train_size+dev_size:]
+
     # # ====================================
 
     # start from scratch
@@ -327,7 +361,6 @@ class TrainIdentifyReview(FlowSpec):
     """End node!"""
     print('done! great work!')
 
-
 if __name__ == "__main__":
   """
   To validate this flow, run `python conflearn.py`. To list
@@ -347,3 +380,5 @@ if __name__ == "__main__":
   You can specify a run id as well.
   """
   flow = TrainIdentifyReview()
+
+
